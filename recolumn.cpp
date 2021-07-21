@@ -52,6 +52,7 @@ void print_usage(const char *name) {
 }
 
 using colvector = std::vector<icu::UnicodeString>;
+using ufp = std::unique_ptr<UFILE, decltype(&u_fclose)>;
 
 class line_breaker {
 private:
@@ -163,25 +164,36 @@ int main(int argc, char **argv) {
     line_breaker breaker{usplit_re};
     colvector fields;
 
-    std::unique_ptr<UFILE, decltype(&u_fclose)> ustdin{
-        u_fadopt(stdin, nullptr, nullptr), &u_fclose};
-    if (!ustdin) {
-      throw std::runtime_error{"Unable to read from standard input"};
+    uformatter fmt;
+    if (out_type == OUT_LIST) {
+      fmt = std::move(make_list_formatter());
+    } else {
+      fmt = std::move(make_column_formatter());
     }
 
-    if (out_type == OUT_LIST) {
-      auto fmt = make_list_formatter();
-      while (breaker.split(ustdin.get(), &fields)) {
+    auto process = [&fmt, &breaker](UFILE *uf) {
+      colvector fields;
+      while (breaker.split(uf, &fields)) {
         fmt->format_line(fields);
       }
       fmt->flush();
+    };
+
+    if (optind == argc) {
+      ufp ustdin{u_fadopt(stdin, nullptr, nullptr), &u_fclose};
+      if (!ustdin) {
+        throw std::runtime_error{"Unable to read from standard input"};
+      }
+      process(ustdin.get());
     } else {
-      int line = 0;
-      while (breaker.split(ustdin.get(), &fields)) {
-        u_printf("Line %d has %d fields\n", ++line, (int)fields.size());
+      for (int i = optind; i < argc; i += 1) {
+        ufp ufp{u_fopen(argv[i], "r", nullptr, nullptr), &u_fclose};
+        if (!ufp) {
+          throw std::runtime_error{"Unable to read from '"s + argv[i] + "' "s};
+        }
+        process(ufp.get());
       }
     }
-
   } catch (std::exception &e) {
     std::cerr << "Error: " << e.what() << '\n';
     return 1;

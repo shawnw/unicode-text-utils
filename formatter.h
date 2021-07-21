@@ -33,5 +33,7 @@ class formatter {
   virtual void flush() = 0;
 };
 
+using uformatter = std::unique_ptr<formatter>;
 
-std::unique_ptr<formatter> make_list_formatter();
+uformatter make_list_formatter();
+uformatter make_column_formatter();

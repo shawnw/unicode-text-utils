@@ -67,6 +67,25 @@ void list_formatter::format_line(
   u_fputs(output.getTerminatedBuffer(), ustdout);
 }
 
-std::unique_ptr<formatter> make_list_formatter() {
+uformatter make_list_formatter() {
   return std::make_unique<list_formatter>();
+}
+
+class column_formatter : public formatter {
+  int line;
+
+public:
+  column_formatter() : line(0){};
+  ~column_formatter() override {}
+  void format_line(const std::vector<icu::UnicodeString> &) override;
+  void flush() override {}
+};
+
+void column_formatter::format_line(
+    const std::vector<icu::UnicodeString> &fields) {
+  u_printf("Line %d has %d columns.\n", ++line, (int)fields.size());
+}
+
+uformatter make_column_formatter() {
+  return std::make_unique<column_formatter>();
 }
