@@ -34,6 +34,8 @@
 
 #include <getopt.h>
 
+#include "formatter.h"
+
 using namespace std::literals::string_literals;
 
 const char *version = "0.1";
@@ -45,7 +47,8 @@ void print_usage(const char *name) {
       << " -h/--help\t\tDisplay this information.\n"
       << " -v/--version\t\tDisplay version.\n"
       << " -d/--delimiter=RE\tSet the column separator regular expression.\n"
-      << " -c/--colspec=SPEC\tSet the column specification.\n";
+      << " -c/--colspec=SPEC\tSet the column specification.\n"
+      << " -l/--list\t\tUse list mode output.\n";
 }
 
 using colvector = std::vector<icu::UnicodeString>;
@@ -115,16 +118,17 @@ bool line_breaker::split(UFILE *uf, colvector *out) {
 }
 
 int main(int argc, char **argv) {
-  struct option opts[] = {{"version", 0, nullptr, 'v'},
-                          {"help", 0, nullptr, 'h'},
-                          {"delimiter", 1, nullptr, 'd'},
-                          {"colspec", 1, nullptr, 'c'},
-                          {nullptr, 0, nullptr, 0}};
+  enum output_type { OUT_COLUMN, OUT_LIST } out_type = OUT_COLUMN;
+
+  struct option opts[] = {
+      {"version", 0, nullptr, 'v'},   {"help", 0, nullptr, 'h'},
+      {"delimiter", 1, nullptr, 'd'}, {"colspec", 1, nullptr, 'c'},
+      {"list", 0, nullptr, 'l'},      {nullptr, 0, nullptr, 0}};
   const char *split_re = "\\s+";
   const char *colspec = nullptr;
 
   for (int val;
-       (val = getopt_long(argc, argv, "vhd:c:", opts, nullptr)) != -1;) {
+       (val = getopt_long(argc, argv, "vhd:c:l", opts, nullptr)) != -1;) {
     switch (val) {
     case 'v':
       std::cout << argv[0] << " version " << version << '\n';
@@ -137,6 +141,9 @@ int main(int argc, char **argv) {
       break;
     case 'c':
       colspec = optarg;
+      break;
+    case 'l':
+      out_type = OUT_LIST;
       break;
     case '?':
     default:
@@ -162,9 +169,17 @@ int main(int argc, char **argv) {
       throw std::runtime_error{"Unable to read from standard input"};
     }
 
-    int line = 0;
-    while (breaker.split(ustdin.get(), &fields)) {
-      u_printf("Line %d has %d fields\n", ++line, (int)fields.size());
+    if (out_type == OUT_LIST) {
+      auto fmt = make_list_formatter();
+      while (breaker.split(ustdin.get(), &fields)) {
+        fmt->format_line(fields);
+      }
+      fmt->flush();
+    } else {
+      int line = 0;
+      while (breaker.split(ustdin.get(), &fields)) {
+        u_printf("Line %d has %d fields\n", ++line, (int)fields.size());
+      }
     }
 
   } catch (std::exception &e) {
