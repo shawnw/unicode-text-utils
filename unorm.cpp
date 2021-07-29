@@ -28,7 +28,6 @@
 #include <stdexcept>
 #include <cerrno>
 #include <cstring>
-#include <cstdlib>
 
 #include <unicode/normalizer2.h>
 #include <unicode/stringpiece.h>
@@ -40,7 +39,6 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <getopt.h>
-#include <stdio.h>
 
 const char *version = "0.1";
 
@@ -79,7 +77,7 @@ public:
       close(fd);
     }
   }
-  operator int() { return fd; }
+  operator int() const noexcept { return fd; }
 };
 
 bool try_mmap_norm(const char *filename, const icu::Normalizer2 *method,
