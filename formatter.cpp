@@ -31,9 +31,9 @@
 #include <unicode/listformatter.h>
 #include <unicode/ustdio.h>
 #include <unicode/unistr.h>
-#include <unicode/schriter.h>
 
 #include "formatter.h"
+#include "util.h"
 
 using namespace std::literals::string_literals;
 
@@ -72,52 +72,6 @@ void list_formatter::format_line(
 
 uformatter make_list_formatter() { return std::make_unique<list_formatter>(); }
 
-// Return the number of fixed-width columns taken up by a unicode codepoint
-// Inspired by https://www.cl.cam.ac.uk/~mgk25/ucs/wcwidth.c
-static int unicwidth(UChar32 c) {
-  if (c == 0 || c == 0x200B) { // nul and ZERO WIDTH SPACE
-    return 0;
-  } else if (c >= 0x1160 && c <= 0x11FF) { // Hangul Jamo vowels and
-                                           // final consonants
-    return 0;
-  } else if (c == 0xAD) { // SOFT HYPHEN
-    return 1;
-  } else if (u_isISOControl(c)) {
-    return 0;
-  }
-
-  int type = u_charType(c);
-  if (type == U_NON_SPACING_MARK || type == U_ENCLOSING_MARK ||
-      type == U_FORMAT_CHAR) {
-    return 0;
-  }
-
-  switch (u_getIntPropertyValue(c, UCHAR_EAST_ASIAN_WIDTH)) {
-  case U_EA_FULLWIDTH:
-  case U_EA_WIDE:
-    return 2;
-  case U_EA_HALFWIDTH:
-  case U_EA_NARROW:
-  case U_EA_NEUTRAL:
-  case U_EA_AMBIGUOUS:
-    return 1;
-  default:
-    return 1;
-  }
-
-  return -1;
-}
-
-static int count_width(const icu::UnicodeString &s) {
-  auto iter = icu::StringCharacterIterator{s};
-  int width = 0;
-  for (UChar32 c = iter.first32PostInc(); c != StringCharacterIterator::DONE;
-       c = iter.next32PostInc()) {
-    width += unicwidth(c);
-  }
-  return width;
-}
-
 class column_formatter : public formatter {
   std::vector<std::vector<icu::UnicodeString>> data;
 
@@ -147,7 +101,7 @@ void column_formatter::flush() {
 
     std::vector<int> linewidths(line.size(), 0);
     for (int n = 0; n < line.size(); n += 1) {
-      int w = count_width(line[n]);
+      int w = uu::unicswidth(line[n]);
       linewidths[n] = w;
       maxwidths[n] = std::max(maxwidths[n], w);
     }
