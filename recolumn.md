@@ -57,16 +57,3 @@ TODO: Document format
 If no specification is given, defaults to automatically determining
 the column widths based on the longest value of each column, and
 left-justfication within each column.
-
-
-Build Instructions
-------------------
-
-Requirements: A C++ compiler, cmake, ICU libraries and header files.
-
-From the root project directory:
-
-    mkdir build
-    cd build
-    cmake -DCMAKE_BUILD_TYPE=Release ..
-    make
