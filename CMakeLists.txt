@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED True)
 
 find_package(ICU 60 REQUIRED COMPONENTS uc io i18n)
 
-add_executable(recolumn recolumn.cpp formatter.cpp)
+add_executable(recolumn recolumn.cpp formatter.cpp util.cpp)
 target_include_directories(recolumn PRIVATE ${ICU_INCLUDE_DIR})
 target_link_libraries(recolumn PRIVATE ICU::uc ICU::io ICU::i18n)
 

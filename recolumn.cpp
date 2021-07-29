@@ -35,6 +35,7 @@
 #include <getopt.h>
 
 #include "formatter.h"
+#include "util.h"
 
 using namespace std::literals::string_literals;
 
@@ -59,7 +60,6 @@ private:
   std::unique_ptr<icu::RegexPattern> pattern;
   std::unique_ptr<icu::RegexMatcher> splitter;
   colvector fields;
-  bool getline(UFILE *, icu::UnicodeString *out);
 
 public:
   line_breaker(const icu::UnicodeString &re);
@@ -82,28 +82,11 @@ line_breaker::line_breaker(const icu::UnicodeString &re) {
   }
 }
 
-bool line_breaker::getline(UFILE *uf, icu::UnicodeString *out) {
-  UChar buffer[4096];
-  out->remove();
-  do {
-    UChar *s = u_fgets(buffer, 4096, uf);
-    if (!s) {
-      return u_feof(uf) && !out->isEmpty();
-    }
-    out->append(s, -1);
-    auto lastidx = out->length() - 1;
-    if (out->charAt(lastidx) == '\n') {
-      out->remove(lastidx);
-      return true;
-    }
-  } while (1);
-}
-
 bool line_breaker::split(UFILE *uf, colvector *out) {
   icu::UnicodeString line;
   UErrorCode err = U_ZERO_ERROR;
 
-  if (!getline(uf, &line)) {
+  if (!uu::getline(uf, &line)) {
     return false;
   }
 
