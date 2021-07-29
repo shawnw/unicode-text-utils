@@ -176,7 +176,6 @@ int main(int argc, char **argv) {
       while (breaker.split(uf, &fields)) {
         fmt->format_line(fields);
       }
-      fmt->flush();
     };
 
     if (optind == argc) {
@@ -193,6 +192,7 @@ int main(int argc, char **argv) {
         }
         process(ufp.get());
       }
+      fmt->flush();
     }
   } catch (std::exception &e) {
     std::cerr << "Error: " << e.what() << '\n';
