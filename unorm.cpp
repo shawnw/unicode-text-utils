@@ -71,9 +71,16 @@ private:
   int fd;
 
 public:
+  file_wrapper() : fd(-1) {}
   file_wrapper(int fd_) : fd(fd_) {}
+  void set(int fd_) {
+    if (fd > STDERR_FILENO) {
+      close(fd);
+    }
+    fd = fd_;
+  }
   ~file_wrapper() noexcept {
-    if (fd >= 0) {
+    if (fd > STDERR_FILENO) {
       close(fd);
     }
   }
@@ -82,7 +89,14 @@ public:
 
 bool try_mmap_norm(const char *filename, const icu::Normalizer2 *method,
                    icu::ByteSink &bs) {
-  file_wrapper fd(open(filename, O_RDONLY));
+  file_wrapper fd;
+
+  if (std::strcmp(filename, "/dev/stdin") == 0 ||
+      std::strcmp(filename, "-") == 0) {
+    fd.set(STDIN_FILENO);
+  } else {
+    fd.set(open(filename, O_RDONLY));
+  }
   if (fd < 0) {
     throw std::invalid_argument{filename};
   }
@@ -122,11 +136,17 @@ bool try_line_norm(const char *filename, const icu::Normalizer2 *method,
   ssize_t len;
   std::string normalized;
   UErrorCode err = U_ZERO_ERROR;
-  std::ifstream inf{filename};
+  std::ifstream fstr;
+  bool using_stdin = std::strcmp(filename, "/dev/stdin") == 0 ||
+                     std::strcmp(filename, "-") == 0;
 
-  if (!inf.is_open()) {
-    throw std::invalid_argument{filename};
+  if (!using_stdin) {
+    fstr.open(filename);
+    if (!fstr.is_open()) {
+      throw std::invalid_argument{filename};
+    }
   }
+  std::istream &inf = using_stdin ? std::cin : fstr;
 
   while (std::getline(inf, line)) {
     line += '\n';

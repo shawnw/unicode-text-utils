@@ -26,6 +26,7 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include <cstring>
 
 #include <unicode/regex.h>
 #include <unicode/ucnv.h>
@@ -169,11 +170,18 @@ int main(int argc, char **argv) {
       process(ustdin.get());
     } else {
       for (int i = optind; i < argc; i += 1) {
-        ufp ufp{u_fopen(argv[i], "r", nullptr, nullptr), &u_fclose};
-        if (!ufp) {
+        ufp uf = [&]() {
+          if (std::strcmp(argv[i], "/dev/stdin") == 0 ||
+              std::strcmp(argv[i], "-")) {
+            return ufp{u_fadopt(stdin, nullptr, nullptr), &u_fclose};
+          } else {
+            return ufp{u_fopen(argv[i], "r", nullptr, nullptr), &u_fclose};
+          }
+        }();
+        if (!uf) {
           throw std::runtime_error{"Unable to read from '"s + argv[i] + "' "s};
         }
-        process(ufp.get());
+        process(uf.get());
       }
       fmt->flush();
     }
