@@ -40,7 +40,7 @@
 #include <fcntl.h>
 #include <getopt.h>
 
-const char *version = "0.1";
+const char *version = "1.0";
 
 using namespace std::literals::string_literals;
 
@@ -88,7 +88,7 @@ public:
 };
 
 bool try_mmap_norm(const char *filename, const icu::Normalizer2 *method,
-                   icu::ByteSink &bs) {
+                   icu::ByteSink &bs, bool check) {
   file_wrapper fd;
 
   if (std::strcmp(filename, "/dev/stdin") == 0 ||
@@ -121,7 +121,13 @@ bool try_mmap_norm(const char *filename, const icu::Normalizer2 *method,
   icu::StringPiece sp(static_cast<char *>(utf8.get()), s.st_size);
   UErrorCode err = U_ZERO_ERROR;
 
-  method->normalizeUTF8(0, sp, bs, nullptr, err);
+  if (check) {
+    if (!method->isNormalizedUTF8(sp, err)) {
+      std::exit(2);
+    }
+  } else {
+    method->normalizeUTF8(0, sp, bs, nullptr, err);
+  }
 
   if (U_FAILURE(err)) {
     throw std::runtime_error{"Unable to normalize text: "s + u_errorName(err)};
@@ -131,7 +137,7 @@ bool try_mmap_norm(const char *filename, const icu::Normalizer2 *method,
 }
 
 bool try_line_norm(const char *filename, const icu::Normalizer2 *method,
-                   icu::ByteSink &bs) {
+                   icu::ByteSink &bs, bool check) {
   std::string line;
   ssize_t len;
   std::string normalized;
@@ -151,7 +157,13 @@ bool try_line_norm(const char *filename, const icu::Normalizer2 *method,
   while (std::getline(inf, line)) {
     line += '\n';
     icu::StringPiece sp(line.data(), line.size());
-    method->normalizeUTF8(0, sp, bs, nullptr, err);
+    if (check) {
+      if (!method->isNormalizedUTF8(sp, err)) {
+        std::exit(2);
+      }
+    } else {
+      method->normalizeUTF8(0, sp, bs, nullptr, err);
+    }
     if (U_FAILURE(err)) {
       break;
     }
@@ -165,11 +177,11 @@ bool try_line_norm(const char *filename, const icu::Normalizer2 *method,
 }
 
 void do_normalization(const char *filename, const icu::Normalizer2 *method,
-                      icu::ByteSink &bs) {
-  if (try_mmap_norm(filename, method, bs)) {
+                      icu::ByteSink &bs, bool check) {
+  if (try_mmap_norm(filename, method, bs, check)) {
     return;
   }
-  if (try_line_norm(filename, method, bs)) {
+  if (try_line_norm(filename, method, bs, check)) {
     return;
   }
   throw std::runtime_error{"Unable to normalize file '"s + filename + "'"s};
@@ -180,10 +192,11 @@ int main(int argc, char **argv) {
       {"version", 0, nullptr, 'v'}, {"help", 0, nullptr, 'h'},
       {"nfc", 0, nullptr, 1},       {"nfd", 0, nullptr, 2},
       {"nfkc", 0, nullptr, 3},      {"nfkd", 0, nullptr, 4},
-      {nullptr, 0, nullptr, 0}};
+      {"check", 0, nullptr, 'c'},   {nullptr, 0, nullptr, 0}};
 
   const icu::Normalizer2 *method = nullptr;
   UErrorCode err = U_ZERO_ERROR;
+  bool check = false;
 
   for (int val; (val = getopt_long(argc, argv, "vh", opts, nullptr)) != -1;) {
     switch (val) {
@@ -191,8 +204,12 @@ int main(int argc, char **argv) {
       std::cout << argv[0] << " version " << version << '\n';
       return 0;
     case 'h':
-      std::cout << argv[0] << "--nfc|--nfd|--nfkc|--nfkd [FILE ...]\n";
+      std::cout << argv[0]
+                << " [--check] --nfc|--nfd|--nfkc|--nfkd [FILE ...]\n";
       return 0;
+    case 'c':
+      check = true;
+      break;
     case 1:
       if (method) {
         std::cerr << argv[0] << ": can only specify one normalization mode.\n";
@@ -238,17 +255,21 @@ int main(int argc, char **argv) {
     return 1;
   }
 
+  int exit_code = 0;
+
   try {
     output_bytesink bs(STDOUT_FILENO);
 
     if (optind == argc) {
-      do_normalization("/dev/stdin", method, bs);
+      do_normalization("/dev/stdin", method, bs, check);
     } else {
       for (int i = optind; i < argc; i += 1) {
         try {
-          do_normalization(argv[i], method, bs);
+          do_normalization(argv[i], method, bs, check);
         } catch (std::invalid_argument &) {
-          std::cerr << "Unable to open '" << argv[i] << "' for reading.\n";
+          std::cerr << argv[0] << ": Unable to open '" << argv[i]
+                    << "' for reading.\n";
+          exit_code = 3;
         }
       }
     }
@@ -257,5 +278,5 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  return 0;
+  return exit_code;
 }

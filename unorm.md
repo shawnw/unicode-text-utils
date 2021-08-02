@@ -21,3 +21,5 @@ Also understands:
 
 * `--version`/`-v` Print out the version and exit.
 * `--help`/`-h` - Print out usage information and exit.
+* `--check`/`-c` - Instead of converting text, exits with error code 2
+    if the input is **NOT** in the given normalization form.
