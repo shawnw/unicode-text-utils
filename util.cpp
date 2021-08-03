@@ -83,7 +83,7 @@ bool uu::getline(UFILE *uf, icu::UnicodeString *out, bool flush) {
   bool first = true;
 
   do {
-    UChar *s = u_fgets(buffer, 4096, uf);
+    UChar *s = u_fgets(buffer, 4095, uf);
     if (!s) {
       return u_feof(uf) && !out->isEmpty();
     }
@@ -116,7 +116,7 @@ bool uu::getparagraph(UFILE *uf, icu::UnicodeString *out, bool flush) {
         out->append(line);
       }
     } else {
-      return !out->isEmpty();
+      return u_feof(uf) && !out->isEmpty();
     }
   } while (1);
 }
