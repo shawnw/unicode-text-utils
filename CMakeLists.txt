@@ -17,3 +17,7 @@ target_link_libraries(unorm PRIVATE ICU::uc)
 add_executable(ufmt ufmt.cpp util.cpp)
 target_include_directories(ufmt PRIVATE ${ICU_INCLUDE_DIR})
 target_link_libraries(ufmt PRIVATE ICU::uc ICU::io)
+
+add_executable(uwc uwc.cpp util.cpp)
+target_include_directories(uwc PRIVATE ${ICU_INCLUDE_DIR})
+target_link_libraries(uwc PRIVATE ICU::uc ICU::io)

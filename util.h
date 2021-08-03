@@ -29,6 +29,7 @@ namespace uu {
 int unicwidth(UChar32);
 int unicswidth(const icu::UnicodeString &);
 
-bool getline(UFILE *, icu::UnicodeString *, bool flush = true);
+bool getline(UFILE *, icu::UnicodeString *, bool flush = true,
+             bool keepnl = false);
 bool getparagraph(UFILE *, icu::UnicodeString *, bool flush = true);
 }; // namespace uu

@@ -91,7 +91,7 @@ int uu::unicswidth(const icu::UnicodeString &s) {
   return width;
 }
 
-bool uu::getline(UFILE *uf, icu::UnicodeString *out, bool flush) {
+bool uu::getline(UFILE *uf, icu::UnicodeString *out, bool flush, bool keepnl) {
   UChar buffer[4096];
   if (flush) {
     out->remove();
@@ -106,7 +106,9 @@ bool uu::getline(UFILE *uf, icu::UnicodeString *out, bool flush) {
     }
     out->append(s, -1);
     if (out->endsWith(u"\n", 0, 1)) {
-      out->remove(out->length() - 1);
+      if (!keepnl) {
+        out->remove(out->length() - 1);
+      }
       return true;
     }
   } while (1);
