@@ -21,6 +21,8 @@
  * SOFTWARE.
  */
 
+#include <unordered_map>
+
 #include <unicode/char16ptr.h>
 #include <unicode/unistr.h>
 #include <unicode/schriter.h>
@@ -31,33 +33,48 @@
 // Return the number of fixed-width columns taken up by a unicode codepoint
 // Inspired by https://www.cl.cam.ac.uk/~mgk25/ucs/wcwidth.c
 int uu::unicwidth(UChar32 c) {
+  static std::unordered_map<UChar32, int> cache;
+
+  auto it = cache.find(c);
+  if (it != cache.end()) {
+    return it->second;
+  }
+
   if (c == 0 || c == 0x200B) { // nul and ZERO WIDTH SPACE
+    cache.emplace(c, 0);
     return 0;
   } else if (c >= 0x1160 && c <= 0x11FF) { // Hangul Jamo vowels and
                                            // final consonants
+    cache.emplace(c, 0);
     return 0;
   } else if (c == 0xAD) { // SOFT HYPHEN
+    cache.emplace(c, 1);
     return 1;
   } else if (u_isISOControl(c)) {
+    cache.emplace(c, 0);
     return 0;
   }
 
   int type = u_charType(c);
   if (type == U_NON_SPACING_MARK || type == U_ENCLOSING_MARK ||
       type == U_FORMAT_CHAR) {
+    cache.emplace(c, 0);
     return 0;
   }
 
   switch (u_getIntPropertyValue(c, UCHAR_EAST_ASIAN_WIDTH)) {
   case U_EA_FULLWIDTH:
   case U_EA_WIDE:
+    cache.emplace(c, 2);
     return 2;
   case U_EA_HALFWIDTH:
   case U_EA_NARROW:
   case U_EA_NEUTRAL:
   case U_EA_AMBIGUOUS:
+    cache.emplace(c, 1);
     return 1;
   default:
+    cache.emplace(c, 1);
     return 1;
   }
 
