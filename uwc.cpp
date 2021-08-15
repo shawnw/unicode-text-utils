@@ -193,7 +193,7 @@ int main(int argc, char **argv) {
   unsigned int flags = 0;
 
   for (int val;
-       (val = getopt_long(argc, argv, "vcmlwL", opts, nullptr)) != -1;) {
+       (val = getopt_long(argc, argv, "vhcmlwL", opts, nullptr)) != -1;) {
     switch (val) {
     case 'v':
       std::cout << argv[0] << " version " << version << '\n';
