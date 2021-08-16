@@ -100,6 +100,25 @@ void count(UFILE *uf, const char *filename, unsigned int flags,
   struct counts counts(flags);
   UErrorCode err = U_ZERO_ERROR;
   icu::UnicodeString line;
+  std::unique_ptr<icu::BreakIterator> wit, cit;
+
+  if (flags & WC_WORD) {
+    wit = std::unique_ptr<icu::BreakIterator>{
+        icu::BreakIterator::createWordInstance(loc, err)};
+    if (U_FAILURE(err)) {
+      throw std::runtime_error{"Unable to create word break iterator: "s +
+                               u_errorName(err)};
+    }
+  }
+
+  if (flags & WC_CHAR) {
+    cit = std::unique_ptr<icu::BreakIterator>{
+        icu::BreakIterator::createCharacterInstance(loc, err)};
+    if (U_FAILURE(err)) {
+      throw std::runtime_error{"Unable to create character break iterator: "s +
+                               u_errorName(err)};
+    }
+  }
 
   while (uu::getline(uf, &line, true, true)) {
     if (flags & WC_CP) {
@@ -120,12 +139,6 @@ void count(UFILE *uf, const char *filename, unsigned int flags,
     }
 
     if (flags & WC_WORD) {
-      auto wit = std::unique_ptr<icu::BreakIterator>{
-          icu::BreakIterator::createWordInstance(loc, err)};
-      if (U_FAILURE(err)) {
-        throw std::runtime_error{"Unable to create word break iterator: "s +
-                                 u_errorName(err)};
-      }
       wit->setText(line);
       for (auto pos = wit->first(); pos != icu::BreakIterator::DONE;
            pos = wit->next()) {
@@ -137,12 +150,6 @@ void count(UFILE *uf, const char *filename, unsigned int flags,
     }
 
     if (flags & WC_CHAR) {
-      auto cit = std::unique_ptr<icu::BreakIterator>{
-          icu::BreakIterator::createCharacterInstance(loc, err)};
-      if (U_FAILURE(err)) {
-        throw std::runtime_error{
-            "Unable to create character break iterator: "s + u_errorName(err)};
-      }
       cit->setText(line);
       for (auto pos = cit->first(); pos != icu::BreakIterator::DONE;
            pos = cit->next()) {
