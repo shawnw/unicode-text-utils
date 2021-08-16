@@ -4,8 +4,10 @@ Unicode Text Utils
 Assorted Unicode-aware command line utilties.
 
 * [recolumn](recolumn.md) - Reformat column-oriented text in various ways.
-* [unorm](unorm.md) - Normalize UTF-8 text.
 * [ufmt](ufmt.md) - Word-wrap paragraphs according to Unicode rules.
+* [unorm](unorm.md) - Normalize UTF-8 text.
+* [usplit](usplit.md) - Split text up into individual tokens
+  (Codepoints, characters, etc.)
 * [uwc](uwc.md) - Count words, characters, etc. according to Unicode rules.
 
 Character Encodings

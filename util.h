@@ -31,5 +31,6 @@ int unicswidth(const icu::UnicodeString &);
 
 bool getline(UFILE *, icu::UnicodeString *, bool flush = true,
              bool keepnl = false);
-bool getparagraph(UFILE *, icu::UnicodeString *, bool flush = true);
+bool getparagraph(UFILE *, icu::UnicodeString *, bool flush = true,
+                  bool keepnls = false);
 }; // namespace uu

@@ -21,3 +21,7 @@ target_link_libraries(ufmt PRIVATE ICU::uc ICU::io)
 add_executable(uwc uwc.cpp util.cpp)
 target_include_directories(uwc PRIVATE ${ICU_INCLUDE_DIR})
 target_link_libraries(uwc PRIVATE ICU::uc ICU::io)
+
+add_executable(usplit usplit.cpp util.cpp)
+target_include_directories(usplit PRIVATE ${ICU_INCLUDE_DIR})
+target_link_libraries(usplit PRIVATE ICU::uc ICU::io)

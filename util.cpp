@@ -114,7 +114,7 @@ bool uu::getline(UFILE *uf, icu::UnicodeString *out, bool flush, bool keepnl) {
   } while (1);
 }
 
-bool uu::getparagraph(UFILE *uf, icu::UnicodeString *out, bool flush) {
+bool uu::getparagraph(UFILE *uf, icu::UnicodeString *out, bool flush, bool keepnls) {
   if (flush) {
     out->remove();
   }
@@ -123,14 +123,19 @@ bool uu::getparagraph(UFILE *uf, icu::UnicodeString *out, bool flush) {
   bool first = true;
 
   do {
-    if (uu::getline(uf, &line)) {
-      if (line.isEmpty()) {
+    if (uu::getline(uf, &line, true, keepnls)) {
+      if (line.isEmpty() || line.compare(u"\n", 1) == 0) {
+        if (keepnls) {
+          out->append(line);
+        }
         return true;
       } else {
         if (first) {
           first = false;
         } else {
-          out->append(u' ');
+          if (!keepnls) {
+            out->append(u' ');
+          }
         }
         out->append(line);
       }
