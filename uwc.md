@@ -27,3 +27,4 @@ It also understands the following options:
 
 * `--version`/`-v` Print out the version and exit.
 * `--help`/`-h` Print out usage information and exit.
+* `--json`/`-j` Output an array of JSON objects instead of plain numbers.

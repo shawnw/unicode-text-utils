@@ -34,20 +34,21 @@
 
 #include <getopt.h>
 
+#include "json.hpp"
 #include "util.h"
 
 using namespace std::literals::string_literals;
 
 using ufp = std::unique_ptr<UFILE, decltype(&u_fclose)>;
 
-const char *version = "0.1";
-
+const char *version = "0.2";
 enum wanted_stats {
   WC_CP = 0x1,
   WC_CHAR = 0x2,
   WC_WORD = 0x4,
   WC_NL = 0x8,
-  WC_LEN = 0x10
+  WC_LEN = 0x10,
+  WC_PRINT = 0x20
 };
 
 struct counts {
@@ -95,8 +96,29 @@ std::ostream &operator<<(std::ostream &os, const struct counts &c) {
   return os;
 }
 
-void count(UFILE *uf, const char *filename, unsigned int flags,
-           struct counts &total_counts, const icu::Locale &loc) {
+nlohmann::json counts_to_json(const char *filename, const struct counts &c) {
+  nlohmann::json res;
+  res["filename"] = filename;
+  if (c.flags & WC_CP) {
+    res["codepoints"] = c.cp;
+  }
+  if (c.flags & WC_CHAR) {
+    res["characters"] = c.chars;
+  }
+  if (c.flags & WC_WORD) {
+    res["words"] = c.word;
+  }
+  if (c.flags & WC_NL) {
+    res["newlines"] = c.nl;
+  }
+  if (c.flags & WC_LEN) {
+    res["max-line-length"] = c.len;
+  }
+  return res;
+}
+
+nlohmann::json count(UFILE *uf, const char *filename, unsigned int flags,
+                     struct counts &total_counts, const icu::Locale &loc) {
   struct counts counts(flags);
   UErrorCode err = U_ZERO_ERROR;
   icu::UnicodeString line;
@@ -159,11 +181,15 @@ void count(UFILE *uf, const char *filename, unsigned int flags,
     }
   }
 
-  std::cout << counts;
-  if (filename) {
-    std::cout << '\t' << filename;
+  if (flags & WC_PRINT) {
+    std::cout << counts;
+    if (filename) {
+      std::cout << '\t' << filename;
+    }
+    std::cout << '\n';
   }
-  std::cout << '\n';
+
+  return counts_to_json(filename, counts);
 }
 
 void print_usage(const char *progname) {
@@ -188,19 +214,31 @@ maximum line length.
 
 When no options are given, acts like --lines --words --chars was
 given.
+
+
+Other options:
+
+  -j, --json : print out an array of JSON objects instead.
+  -v, --version : print out version and exit.
+  -h, --help : print out usage information and exit.
 )";
 }
 
 int main(int argc, char **argv) {
-  struct option opts[] = {
-      {"version", 0, nullptr, 'v'},         {"help", 0, nullptr, 'h'},
-      {"codepoints", 0, nullptr, 'c'},      {"chars", 0, nullptr, 'm'},
-      {"lines", 0, nullptr, 'l'},           {"words", 0, nullptr, 'w'},
-      {"max-line-length", 0, nullptr, 'L'}, {nullptr, 0, nullptr, 0}};
+  struct option opts[] = {{"version", 0, nullptr, 'v'},
+                          {"help", 0, nullptr, 'h'},
+                          {"codepoints", 0, nullptr, 'c'},
+                          {"chars", 0, nullptr, 'm'},
+                          {"lines", 0, nullptr, 'l'},
+                          {"words", 0, nullptr, 'w'},
+                          {"max-line-length", 0, nullptr, 'L'},
+                          {"json", 0, nullptr, 'j'},
+                          {nullptr, 0, nullptr, 0}};
   unsigned int flags = 0;
+  bool as_json = false;
 
   for (int val;
-       (val = getopt_long(argc, argv, "vhcmlwL", opts, nullptr)) != -1;) {
+       (val = getopt_long(argc, argv, "vhcmlwLj", opts, nullptr)) != -1;) {
     switch (val) {
     case 'v':
       std::cout << argv[0] << " version " << version << '\n';
@@ -223,6 +261,9 @@ int main(int argc, char **argv) {
     case 'L':
       flags |= WC_LEN;
       break;
+    case 'j':
+      as_json = true;
+      break;
     default:
       return 1;
     }
@@ -232,17 +273,25 @@ int main(int argc, char **argv) {
     flags = WC_CHAR | WC_WORD | WC_NL;
   }
 
+  if (!as_json) {
+    flags |= WC_PRINT;
+  }
+
   try {
     struct counts total_counts(flags);
     int nfiles = 0;
     icu::Locale loc;
+    nlohmann::json results;
 
     if (optind == argc) {
       ufp ustdin{u_fadopt(stdin, nullptr, nullptr), &u_fclose};
       if (!ustdin) {
         throw std::runtime_error{"Unable to read from standard input"};
       }
-      count(ustdin.get(), nullptr, flags, total_counts, loc);
+      auto res = count(ustdin.get(), nullptr, flags, total_counts, loc);
+      if (as_json) {
+        results.push_back(res);
+      }
       nfiles += 1;
     } else {
       for (int i = optind; i < argc; i += 1) {
@@ -258,14 +307,20 @@ int main(int argc, char **argv) {
           if (!uf) {
             throw std::invalid_argument{argv[i]};
           }
-          count(uf.get(), argv[i], flags, total_counts, loc);
+          auto res = count(uf.get(), argv[i], flags, total_counts, loc);
+          if (as_json) {
+            results.push_back(res);
+          }
           nfiles += 1;
         } catch (std::invalid_argument &) {
           std::cerr << argv[0] << ": unable to open '" << argv[i] << "'\n";
         }
       }
     }
-    if (nfiles > 1) {
+    if (as_json) {
+      std::cout << results << '\n';
+    }
+    if (nfiles > 1 && !as_json) {
       std::cout << total_counts << "\ttotal\n";
     }
   } catch (std::exception &e) {
