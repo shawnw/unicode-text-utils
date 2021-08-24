@@ -30,26 +30,32 @@
 #include <unicode/ustdio.h>
 #include <unicode/brkiter.h>
 #include <unicode/locid.h>
+#include <unicode/utf8.h>
 
 #include <getopt.h>
 
+#include "json.hpp"
 #include "util.h"
 
 using namespace std::literals::string_literals;
 
 using ufp = std::unique_ptr<UFILE, decltype(&u_fclose)>;
 
-const char *version = "0.1";
+const char *version = "0.2";
 
 enum class split_at { CP, CHAR, WORD, SENTENCE, UNSPEC };
 
+enum class output { TEXT, JSON };
+
 class splitter {
 protected:
+  output mode;
   icu::UnicodeString delim;
   void print_delim(UFILE *);
 
 public:
-  splitter(const icu::UnicodeString &delim_) : delim(delim_){};
+  splitter(const icu::UnicodeString &delim_, output mode_)
+      : delim(delim_), mode(mode_){};
   virtual ~splitter() {}
   virtual void split(UFILE *) = 0;
 };
@@ -64,25 +70,48 @@ void splitter::print_delim(UFILE *uf) {
 
 class cp_splitter : public splitter {
 public:
-  cp_splitter(const icu::UnicodeString &delim_) : splitter(delim_) {}
+  cp_splitter(const icu::UnicodeString &delim_, output mode_)
+      : splitter(delim_, mode_) {}
   ~cp_splitter() override {}
   void split(UFILE *) override;
 };
 
 void cp_splitter::split(UFILE *uf) {
   UChar32 c;
-  UFILE *ustdout = u_get_stdout();
+  UFILE *ustdout = mode == output::TEXT ? u_get_stdout() : nullptr;
   bool first = true;
+
+  if (mode == output::JSON) {
+    std::cout << '[';
+  }
 
   while ((c = u_fgetcx(uf)) != U_EOF) {
     if (c == 0xFFFFFFFF) {
       c = 0xFFFD;
     }
-    if (!first) {
-      print_delim(ustdout);
+    if (mode == output::TEXT) {
+      if (!first) {
+        print_delim(ustdout);
+      }
+      first = false;
+      u_fputc(c, ustdout);
+    } else { // JSON
+      if (!first) {
+        std::cout << ',';
+      }
+      first = false;
+#if 0
+      char utf8_char[U8_MAX_LENGTH + 1] = {'\0'};
+      int32_t o = 0;
+      U8_APPEND_UNSAFE(utf8_char, o, c);
+      std::cout << nlohmann::json(std::string(utf8_char));
+#else
+      std::cout << c;
+#endif
     }
-    first = false;
-    u_fputc(c, ustdout);
+  }
+  if (mode == output::JSON) {
+    std::cout << "]\n";
   }
 }
 
@@ -90,18 +119,19 @@ class break_splitter : public splitter {
 protected:
   std::unique_ptr<icu::BreakIterator> bi;
   virtual bool skip() { return false; }
-  break_splitter(const icu::UnicodeString &delim_) : splitter(delim_) {}
+  break_splitter(const icu::UnicodeString &delim_, output mode_)
+      : splitter(delim_, mode_) {}
 
 public:
   break_splitter(split_at which, icu::Locale &loc,
-                 const icu::UnicodeString &delim_);
+                 const icu::UnicodeString &delim_, output mode_);
   ~break_splitter() override {}
   void split(UFILE *) override;
 };
 
 break_splitter::break_splitter(split_at which, icu::Locale &loc,
-                               const icu::UnicodeString &delim_)
-    : splitter(delim_) {
+                               const icu::UnicodeString &delim_, output mode_)
+    : splitter(delim_, mode_) {
   UErrorCode err = U_ZERO_ERROR;
   bi = std::unique_ptr<icu::BreakIterator>([&]() {
     switch (which) {
@@ -119,22 +149,42 @@ break_splitter::break_splitter(split_at which, icu::Locale &loc,
 void break_splitter::split(UFILE *uf) {
   icu::UnicodeString para;
   int32_t offset = 0;
-  UFILE *ustdout = u_get_stdout();
+  UFILE *ustdout = mode == output::TEXT ? u_get_stdout() : nullptr;
+  bool first = true;
 
-  while (uu::getparagraph(uf, &para, true, true)) {
+  if (mode == output::JSON) {
+    std::cout << '[';
+  }
+
+  while (uu::getparagraph(uf, &para, true, false)) {
     bi->setText(para);
     for (auto pos = bi->first(); pos != icu::BreakIterator::DONE;
          pos = bi->next()) {
-      if (!skip()) {
+      if (!skip() && pos > offset) {
         icu::UnicodeString token;
         para.extractBetween(offset, pos, token);
-        if (offset > 0) {
-          print_delim(ustdout);
+        if (mode == output::TEXT) {
+          if (!first) {
+            print_delim(ustdout);
+          }
+          first = false;
+          u_file_write(token.getBuffer(), token.length(), ustdout);
+        } else { // JSON
+          if (!first) {
+            std::cout << ',';
+          }
+          first = false;
+          std::string utf8s;
+          token.toUTF8String(utf8s);
+          std::cout << nlohmann::json(utf8s);
         }
-        u_file_write(token.getBuffer(), token.length(), ustdout);
       }
       offset = pos;
     }
+  }
+
+  if (mode == output::JSON) {
+    std::cout << "]\n";
   }
 }
 
@@ -143,14 +193,16 @@ private:
   std::unique_ptr<icu::BreakIterator> bi;
 
 public:
-  charbreak_splitter(icu::Locale &loc, const icu::UnicodeString &delim_);
+  charbreak_splitter(icu::Locale &loc, const icu::UnicodeString &delim_,
+                     output mode_);
   ~charbreak_splitter() override {}
   void split(UFILE *) override;
 };
 
 charbreak_splitter::charbreak_splitter(icu::Locale &loc,
-                                       const icu::UnicodeString &delim_)
-    : splitter(delim_) {
+                                       const icu::UnicodeString &delim_,
+                                       output mode_)
+    : splitter(delim_, mode_) {
   UErrorCode err = U_ZERO_ERROR;
   bi = std::unique_ptr<icu::BreakIterator>(
       icu::BreakIterator::createCharacterInstance(loc, err));
@@ -162,7 +214,12 @@ charbreak_splitter::charbreak_splitter(icu::Locale &loc,
 void charbreak_splitter::split(UFILE *uf) {
   icu::UnicodeString line;
   int32_t offset = 0;
-  UFILE *ustdout = u_get_stdout();
+  UFILE *ustdout = mode == output::TEXT ? u_get_stdout() : nullptr;
+  bool first = true;
+
+  if (mode == output::JSON) {
+    std::cout << '[';
+  }
 
   while (uu::getline(uf, &line, true, true)) {
     bi->setText(line);
@@ -170,12 +227,27 @@ void charbreak_splitter::split(UFILE *uf) {
          pos = bi->next()) {
       icu::UnicodeString token;
       line.extractBetween(offset, pos, token);
-      if (offset > 0) {
-        print_delim(ustdout);
+      if (mode == output::TEXT) {
+        if (!first) {
+          print_delim(ustdout);
+        }
+        first = false;
+        u_file_write(token.getBuffer(), token.length(), ustdout);
+      } else { // JSON
+        if (!first) {
+          std::cout << ',';
+        }
+        first = false;
+        std::string utf8s;
+        token.toUTF8String(utf8s);
+        std::cout << nlohmann::json(utf8s);
       }
-      u_file_write(token.getBuffer(), token.length(), ustdout);
       offset = pos;
     }
+  }
+
+  if (mode == output::JSON) {
+    std::cout << "]\n";
   }
 }
 
@@ -184,13 +256,14 @@ protected:
   bool skip() override { return bi->getRuleStatus() == UBRK_WORD_NONE; }
 
 public:
-  wordbreak_splitter(icu::Locale &loc, const icu::UnicodeString &delim_);
+  wordbreak_splitter(icu::Locale &loc, const icu::UnicodeString &delim_, output mode_);
   ~wordbreak_splitter() override {}
 };
 
 wordbreak_splitter::wordbreak_splitter(icu::Locale &loc,
-                                       const icu::UnicodeString &delim_)
-    : break_splitter(delim_) {
+                                       const icu::UnicodeString &delim_,
+                                       output mode_)
+    : break_splitter(delim_, mode_) {
   UErrorCode err = U_ZERO_ERROR;
   bi = std::unique_ptr<icu::BreakIterator>(
       icu::BreakIterator::createWordInstance(loc, err));
@@ -201,16 +274,17 @@ wordbreak_splitter::wordbreak_splitter(icu::Locale &loc,
 }
 
 std::unique_ptr<splitter> make_splitter(split_at which, icu::Locale &loc,
-                                        const icu::UnicodeString &delim) {
+                                        const icu::UnicodeString &delim,
+                                        output mode) {
   switch (which) {
   case split_at::CP:
-    return std::make_unique<cp_splitter>(delim);
+    return std::make_unique<cp_splitter>(delim, mode);
   case split_at::WORD:
-    return std::make_unique<wordbreak_splitter>(loc, delim);
+    return std::make_unique<wordbreak_splitter>(loc, delim, mode);
   case split_at::CHAR:
-    return std::make_unique<charbreak_splitter>(loc, delim);
+    return std::make_unique<charbreak_splitter>(loc, delim, mode);
   case split_at::SENTENCE:
-    return std::make_unique<break_splitter>(which, loc, delim);
+    return std::make_unique<break_splitter>(which, loc, delim, mode);
   default:
     throw std::runtime_error{"Unknown splitter type"};
   }
@@ -236,6 +310,7 @@ Other options (Mandatory arguments for long options are mandatory for short ones
   -v, --version: Print version and exit.
   -d, --delimiter=STRING: Print STRING between tokens. Defaults to newline. Understands standard backslash escape sequences.
   -z, --zero: Use a null byte as the delimiter.
+  -j, --json: Output JSON arrays of strings (Number for --codepoints).
 )";
 }
 
@@ -245,12 +320,13 @@ int main(int argc, char **argv) {
       {"codepoints", 0, nullptr, 'c'}, {"chars", 0, nullptr, 'm'},
       {"sentences", 0, nullptr, 's'},  {"words", 0, nullptr, 'w'},
       {"delimiter", 1, nullptr, 'd'},  {"zero", 0, nullptr, 'z'},
-      {nullptr, 0, nullptr, 0}};
+      {"json", 0, nullptr, 'j'},       {nullptr, 0, nullptr, 0}};
   auto which = split_at::UNSPEC;
   icu::UnicodeString delim{u"\n"};
+  auto mode = output::TEXT;
 
   for (int val;
-       (val = getopt_long(argc, argv, "vhcmswd:z", opts, nullptr)) != -1;) {
+       (val = getopt_long(argc, argv, "vhcmswd:zj", opts, nullptr)) != -1;) {
     switch (val) {
     case 'v':
       std::cout << argv[0] << " version " << version << '\n';
@@ -276,6 +352,9 @@ int main(int argc, char **argv) {
     case 'z':
       delim = u"";
       break;
+    case 'j':
+      mode = output::JSON;
+      break;
     default:
       return 1;
     }
@@ -288,7 +367,7 @@ int main(int argc, char **argv) {
 
   try {
     icu::Locale loc;
-    auto splitter = make_splitter(which, loc, delim);
+    auto splitter = make_splitter(which, loc, delim, mode);
 
     if (optind == argc) {
       ufp ustdin{u_fadopt(stdin, nullptr, nullptr), &u_fclose};

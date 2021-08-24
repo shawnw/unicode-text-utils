@@ -24,3 +24,6 @@ options are also mandatory for short ones):
 * `--help`/`-h` Print out usage information and exit.
 * `--delimiter=STR`/`-d` Use `STR` as the delimiter instead of newline.
 * `--zero`/`-z` Use 0 bytes as delimiters.
+* `--json`/`-j` Ouput a JSON array of strings (Or numbers for
+  `--codepoints`. If multiple input files are given, each array is on
+  its own line.
